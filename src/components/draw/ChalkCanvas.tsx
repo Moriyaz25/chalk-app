@@ -7,16 +7,22 @@ import {
   forwardRef,
   useCallback,
 } from "react";
-import { BOARD_VIEWBOX, type ChalkStroke } from "@/types/chalk";
+import { BOARD_VIEWBOX, type ChalkStroke, type ChalkTextElement } from "@/types/chalk";
 
 type Point = { x: number; y: number };
+type ToolMode = "draw" | "text";
 
 type ChalkCanvasProps = {
   color: string;
   strokeWidth: number;
   boardColorHex: string;
+  mode?: ToolMode;
+  textElements?: ChalkTextElement[];
+  selectedTextId?: string | null;
   className?: string;
   onStrokesChange?: (count: number) => void;
+  onSelectText?: (id: string | null) => void;
+  onMoveText?: (id: string, x: number, y: number) => void;
 };
 
 export type ChalkCanvasHandle = {
@@ -49,8 +55,26 @@ function pointsToPath(points: Point[]): string {
   return d;
 }
 
+function distance(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
 export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
-  function ChalkCanvas({ color, strokeWidth, boardColorHex, className, onStrokesChange }, ref) {
+  function ChalkCanvas(
+    {
+      color,
+      strokeWidth,
+      boardColorHex,
+      mode = "draw",
+      textElements = [],
+      selectedTextId,
+      className,
+      onStrokesChange,
+      onSelectText,
+      onMoveText,
+    },
+    ref
+  ) {
     const svgRef = useRef<SVGSVGElement>(null);
     const [strokes, setStrokes] = useState<ChalkStroke[]>([]);
     const [, setRedoStack] = useState<ChalkStroke[]>([]);
@@ -58,6 +82,7 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
     const [liveStroke, setLiveStroke] = useState<ChalkStroke | null>(null);
     const drawing = useRef(false);
     const pointerId = useRef<number | null>(null);
+    const draggingTextId = useRef<string | null>(null);
 
     const toSvgPoint = useCallback((clientX: number, clientY: number): Point => {
       const svg = svgRef.current;
@@ -71,27 +96,43 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
     const handlePointerDown = useCallback(
       (e: React.PointerEvent<SVGSVGElement>) => {
         e.preventDefault();
+        if (mode === "text") {
+          onSelectText?.(null);
+          return;
+        }
+
+        e.currentTarget.setPointerCapture(e.pointerId);
         drawing.current = true;
         pointerId.current = e.pointerId;
         const point = toSvgPoint(e.clientX, e.clientY);
         currentPoints.current = [point];
-        setLiveStroke({ d: pointsToPath([point]), color, width: strokeWidth, opacity: 0.92 });
+        const pressureWidth = strokeWidth * (0.85 + (e.pressure || 0.5) * 0.3);
+        setLiveStroke({ d: pointsToPath([point]), color, width: pressureWidth, opacity: 0.9 });
         setRedoStack([]);
       },
-      [color, strokeWidth, toSvgPoint]
+      [color, mode, onSelectText, strokeWidth, toSvgPoint]
     );
 
     const handlePointerMove = useCallback(
       (e: React.PointerEvent<SVGSVGElement>) => {
         if (!drawing.current || e.pointerId !== pointerId.current) return;
         e.preventDefault();
-        const point = toSvgPoint(e.clientX, e.clientY);
-        currentPoints.current.push(point);
+        const events =
+          typeof e.nativeEvent.getCoalescedEvents === "function"
+            ? e.nativeEvent.getCoalescedEvents()
+            : [e.nativeEvent];
+        for (const event of events) {
+          const point = toSvgPoint(event.clientX, event.clientY);
+          const last = currentPoints.current[currentPoints.current.length - 1];
+          if (!last || distance(last, point) > 1.8) {
+            currentPoints.current.push(point);
+          }
+        }
         setLiveStroke({
           d: pointsToPath(currentPoints.current),
           color,
           width: strokeWidth,
-          opacity: 0.92,
+          opacity: 0.9,
         });
       },
       [color, strokeWidth, toSvgPoint]
@@ -118,7 +159,7 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
           d: pointsToPath(currentPoints.current),
           color,
           width: strokeWidth,
-          opacity: 0.92,
+          opacity: 0.9,
         };
         updateStrokes((prev) => [...prev, finished]);
       }
@@ -159,19 +200,64 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
       isEmpty: () => strokes.length === 0,
     }));
 
+    const handleTextPointerDown = useCallback(
+      (e: React.PointerEvent<SVGGElement>, id: string) => {
+        if (mode !== "text") return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        pointerId.current = e.pointerId;
+        draggingTextId.current = id;
+        onSelectText?.(id);
+      },
+      [mode, onSelectText]
+    );
+
+    const handleTextPointerMove = useCallback(
+      (e: React.PointerEvent<SVGGElement>) => {
+        if (mode !== "text" || e.pointerId !== pointerId.current || !draggingTextId.current) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const point = toSvgPoint(e.clientX, e.clientY);
+        onMoveText?.(draggingTextId.current, point.x, point.y);
+      },
+      [mode, onMoveText, toSvgPoint]
+    );
+
+    const finishTextDrag = useCallback((e: React.PointerEvent<SVGGElement>) => {
+      if (e.pointerId !== pointerId.current) return;
+      pointerId.current = null;
+      draggingTextId.current = null;
+    }, []);
+
     return (
       <svg
         ref={svgRef}
         viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}
         className={className}
-        style={{ touchAction: "none", cursor: "crosshair" }}
+        style={{ touchAction: "none", cursor: mode === "text" ? "default" : "crosshair" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={finishStroke}
         onPointerLeave={finishStroke}
         onPointerCancel={finishStroke}
       >
+        <defs>
+          <pattern id="card-grain" width="44" height="44" patternUnits="userSpaceOnUse">
+            <path d="M0 8 H44 M0 26 H44 M9 0 V44 M31 0 V44" stroke="#ffffff" strokeOpacity="0.035" />
+            <circle cx="11" cy="12" r="1.2" fill="#ffffff" opacity="0.045" />
+            <circle cx="34" cy="29" r="1" fill="#000000" opacity="0.06" />
+          </pattern>
+          <filter id="chalk-dust">
+            <feTurbulence type="fractalNoise" baseFrequency="0.78" numOctaves="2" seed="8" />
+            <feDisplacementMap in="SourceGraphic" scale="0.65" />
+          </filter>
+          <filter id="soft-paper-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.18" />
+          </filter>
+        </defs>
         <rect width="100%" height="100%" fill={boardColorHex} opacity={0} />
+        <rect width="100%" height="100%" fill="url(#card-grain)" opacity={1} />
         {strokes.map((stroke, i) => (
           <path
             key={i}
@@ -182,6 +268,7 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
             strokeLinejoin="round"
             fill="none"
             opacity={stroke.opacity}
+            filter="url(#chalk-dust)"
           />
         ))}
         {liveStroke && (
@@ -193,8 +280,65 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
             strokeLinejoin="round"
             fill="none"
             opacity={liveStroke.opacity}
+            filter="url(#chalk-dust)"
           />
         )}
+        {textElements.map((item) => {
+          const selected = selectedTextId === item.id;
+          const estimatedWidth = Math.max(80, item.text.length * item.fontSize * 0.52);
+          const estimatedHeight = item.fontSize * 1.35;
+
+          return (
+            <g
+              key={item.id}
+              transform={`translate(${item.x} ${item.y}) rotate(${item.rotation})`}
+              onPointerDown={(e) => handleTextPointerDown(e, item.id)}
+              onPointerMove={handleTextPointerMove}
+              onPointerUp={finishTextDrag}
+              onPointerCancel={finishTextDrag}
+              className={mode === "text" ? "cursor-move" : "pointer-events-none"}
+            >
+              {item.backgroundColor !== "transparent" && (
+                <rect
+                  x={-estimatedWidth / 2 - 14}
+                  y={-estimatedHeight + 4}
+                  width={estimatedWidth + 28}
+                  height={estimatedHeight + 12}
+                  rx={10}
+                  fill={item.backgroundColor}
+                  opacity={0.88}
+                  filter="url(#soft-paper-shadow)"
+                />
+              )}
+              {selected && (
+                <rect
+                  x={-estimatedWidth / 2 - 18}
+                  y={-estimatedHeight}
+                  width={estimatedWidth + 36}
+                  height={estimatedHeight + 20}
+                  rx={12}
+                  fill="none"
+                  stroke="#f1c36f"
+                  strokeDasharray="8 6"
+                  strokeWidth={2}
+                />
+              )}
+              <text
+                textAnchor="middle"
+                fontFamily={item.fontFamily}
+                fontSize={item.fontSize}
+                fontWeight={item.fontFamily.includes("Impact") ? 700 : 600}
+                fill={item.color}
+                stroke={item.outlineColor}
+                strokeWidth={item.outlineWidth}
+                paintOrder="stroke fill"
+                filter="url(#chalk-dust)"
+              >
+                {item.text}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     );
   }

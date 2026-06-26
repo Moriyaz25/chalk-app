@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { ChevronRight, Users } from "lucide-react";
 
 export type CircleSummary = {
   id: string;
@@ -29,7 +29,7 @@ export function CircleCard({ circle }: { circle: CircleSummary }) {
   return (
     <Link
       href={`/board/${circle.id}`}
-      className="flex items-center gap-3 rounded-2xl bg-white/60 hover:bg-white/90 transition-colors px-4 py-3 ring-1 ring-ink/5"
+      className="group flex items-center gap-3 rounded-lg border border-line bg-card/82 px-4 py-3 shadow-sm transition hover:-translate-y-0.5 hover:bg-card"
     >
       <div className="relative flex items-center justify-center h-12 w-12 shrink-0">
         {circle.isDirect ? (
@@ -38,15 +38,15 @@ export function CircleCard({ circle }: { circle: CircleSummary }) {
             <img
               src={avatarMembers[0].image}
               alt={circle.name}
-              className="h-12 w-12 rounded-full object-cover ring-2 ring-paper"
+            className="h-12 w-12 rounded-lg object-cover ring-2 ring-paper"
             />
           ) : (
-            <div className="h-12 w-12 rounded-full bg-dust-pink/40 flex items-center justify-center font-hand text-xl text-ink">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-dust-pink/40 font-hand text-xl text-ink">
               {circle.name?.[0]?.toUpperCase() ?? "?"}
             </div>
           )
         ) : (
-          <div className="h-12 w-12 rounded-full bg-chalk-amber/30 flex items-center justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-chalk-amber/30">
             <Users size={20} className="text-ink-soft" />
           </div>
         )}
@@ -69,6 +69,7 @@ export function CircleCard({ circle }: { circle: CircleSummary }) {
               : `${circle.memberCount} people in this circle`}
         </p>
       </div>
+      <ChevronRight size={17} className="shrink-0 text-ink-soft/35 transition group-hover:text-ink-soft" />
     </Link>
   );
 }

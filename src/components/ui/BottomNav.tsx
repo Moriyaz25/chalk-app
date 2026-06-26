@@ -18,8 +18,8 @@ export function BottomNav() {
   if (pathname?.startsWith("/board/")) return null;
 
   return (
-    <nav className="sticky bottom-0 z-20 border-t border-ink/5 bg-paper/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto flex max-w-md items-center justify-around py-2">
+    <nav className="sticky bottom-0 z-20 border-t border-line bg-card/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+      <div className="mx-auto grid max-w-md grid-cols-3 gap-1 px-3 py-2">
         {NAV_ITEMS.map((item) => {
           const isActive =
             item.href === "/" ? pathname === "/" : pathname?.startsWith(item.href);
@@ -29,8 +29,10 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               className={clsx(
-                "flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl transition-colors",
-                isActive ? "text-ink" : "text-ink-soft/50"
+                "flex flex-col items-center gap-1 rounded-lg px-3 py-2 transition-colors",
+                isActive
+                  ? "bg-chalk-amber/15 text-ink"
+                  : "text-ink-soft/60 hover:bg-ink/5 hover:text-ink"
               )}
             >
               <Icon size={22} strokeWidth={isActive ? 2.4 : 2} />

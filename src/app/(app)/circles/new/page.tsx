@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Copy, Check, Users, UserPlus } from "lucide-react";
+import { Check, ChevronLeft, Copy, UserPlus, Users } from "lucide-react";
 import clsx from "clsx";
 
 type Tab = "create" | "join";
@@ -68,19 +68,22 @@ export default function NewConnectionPage() {
   }
 
   return (
-    <div className="px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-8 max-w-md mx-auto">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="mx-auto max-w-md px-4 pb-8 pt-[max(1.5rem,env(safe-area-inset-top))]">
+      <div className="mb-6 flex items-center gap-3">
         <button
           onClick={() => router.back()}
-          className="flex items-center justify-center h-9 w-9 rounded-full bg-ink/5 text-ink-soft active:scale-90"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-card text-ink-soft shadow-sm active:scale-90"
           aria-label="Back"
         >
           <ChevronLeft size={20} />
         </button>
-        <h1 className="font-hand text-3xl text-ink">Connect</h1>
+        <div>
+          <p className="text-xs font-semibold uppercase text-ink-soft/70">Circles</p>
+          <h1 className="font-hand text-4xl leading-none text-ink">Connect</h1>
+        </div>
       </div>
 
-      <div className="flex rounded-full bg-ink/5 p-1 mb-6">
+      <div className="mb-6 grid grid-cols-2 rounded-lg border border-line bg-card-muted p-1">
         <TabButton active={tab === "create"} onClick={() => setTab("create")}>
           Create
         </TabButton>
@@ -119,35 +122,33 @@ export default function NewConnectionPage() {
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               placeholder="Circle name (e.g. The Squad)"
-              className="w-full rounded-xl border border-ink/10 px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-chalk-amber/50"
+              className="w-full rounded-lg border border-line bg-card px-4 py-3 text-sm text-ink placeholder:text-ink-soft/45 focus:outline-none focus:ring-2 focus:ring-chalk-amber/50"
             />
           )}
 
           {!generatedCode ? (
             <button
               onClick={handleCreateInvite}
-              className="w-full rounded-full bg-ink text-paper py-3 text-sm font-medium active:scale-95"
+              className="w-full rounded-full bg-ink py-3 text-sm font-semibold text-paper shadow-lg shadow-ink/10 active:scale-95"
             >
               Generate invite code
             </button>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-2xl bg-slate-950 board-texture p-6 text-center">
-                <p className="text-xs text-chalk-white/50 font-sans mb-2">Your invite code</p>
-                <p className="font-hand text-4xl text-chalk-white tracking-wide">
-                  {generatedCode}
-                </p>
+              <div className="board-texture rounded-lg bg-slate-950 p-6 text-center shadow-xl shadow-ink/10">
+                <p className="mb-2 font-sans text-xs text-chalk-white/55">Your invite code</p>
+                <p className="font-hand text-4xl text-chalk-white">{generatedCode}</p>
               </div>
               <button
                 onClick={handleCopy}
-                className="w-full flex items-center justify-center gap-2 rounded-full border border-ink/15 py-3 text-sm font-medium text-ink active:scale-95"
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-line bg-card py-3 text-sm font-semibold text-ink active:scale-95"
               >
                 {copied ? <Check size={16} /> : <Copy size={16} />}
                 {copied ? "Link copied" : "Copy invite link"}
               </button>
-              <p className="text-xs text-ink-soft/60 text-center">
+              <p className="text-center text-xs text-ink-soft/70">
                 {createMode === "direct"
-                  ? "This code works once — share it with one person."
+                  ? "This code works once - share it with one person."
                   : "Share this code with everyone you want in the circle."}
               </p>
             </div>
@@ -162,19 +163,19 @@ export default function NewConnectionPage() {
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
             placeholder="Enter code (e.g. K3F9QZ)"
             maxLength={6}
-            className="w-full rounded-xl border border-ink/10 px-4 py-3 text-center text-lg font-hand bg-white focus:outline-none focus:ring-2 focus:ring-chalk-amber/50 tracking-widest"
+            className="w-full rounded-lg border border-line bg-card px-4 py-3 text-center font-hand text-2xl text-ink placeholder:text-ink-soft/45 focus:outline-none focus:ring-2 focus:ring-chalk-amber/50"
           />
           <button
             onClick={handleJoin}
             disabled={joining || joinCode.length < 4}
-            className="w-full rounded-full bg-ink text-paper py-3 text-sm font-medium disabled:opacity-40 active:scale-95"
+            className="w-full rounded-full bg-ink py-3 text-sm font-semibold text-paper disabled:opacity-40 active:scale-95"
           >
-            {joining ? "Joining…" : "Join"}
+            {joining ? "Joining..." : "Join"}
           </button>
         </div>
       )}
 
-      {error && <p className="text-sm text-dust-pink mt-4 text-center">{error}</p>}
+      {error && <p className="mt-4 text-center text-sm text-dust-pink">{error}</p>}
     </div>
   );
 }
@@ -192,8 +193,8 @@ function TabButton({
     <button
       onClick={onClick}
       className={clsx(
-        "flex-1 rounded-full py-2 text-sm font-medium transition-colors",
-        active ? "bg-white text-ink shadow-sm" : "text-ink-soft/60"
+        "rounded-md py-2 text-sm font-semibold transition-colors",
+        active ? "bg-card text-ink shadow-sm" : "text-ink-soft hover:text-ink"
       )}
     >
       {children}
@@ -218,23 +219,21 @@ function ModeCard({
     <button
       onClick={onClick}
       className={clsx(
-        "flex flex-col items-start gap-2 rounded-2xl p-4 text-left transition-all border",
-        active
-          ? "border-chalk-amber bg-chalk-amber/10"
-          : "border-ink/10 bg-white"
+        "flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-all",
+        active ? "border-chalk-amber bg-chalk-amber/15" : "border-line bg-card"
       )}
     >
       <div
         className={clsx(
-          "h-9 w-9 rounded-full flex items-center justify-center",
+          "flex h-9 w-9 items-center justify-center rounded-lg",
           active ? "bg-chalk-amber/30 text-cork-dark" : "bg-ink/5 text-ink-soft"
         )}
       >
         {icon}
       </div>
       <div>
-        <p className="text-sm font-medium text-ink">{title}</p>
-        <p className="text-xs text-ink-soft/60">{subtitle}</p>
+        <p className="text-sm font-semibold text-ink">{title}</p>
+        <p className="text-xs text-ink-soft/70">{subtitle}</p>
       </div>
     </button>
   );
