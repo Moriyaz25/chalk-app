@@ -1,0 +1,193 @@
+// Chalk — Prisma schema
+// Run `npx prisma generate` and `npx prisma migrate dev` locally after setting DATABASE_URL in .env
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────
+// AUTH (NextAuth.js — Google provider)
+// ───────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  // app-specific
+  username      String?   @unique // short handle shown in invite contexts
+  chalkColor    String    @default("#F2E9D8") // signature chalk color the user draws with by default
+
+  accounts      Account[]
+  sessions      Session[]
+
+  // Circles (groups) this user belongs to
+  memberships   CircleMember[]
+
+  // Boards sent and received
+  sentBoards     Board[]        @relation("BoardSender")
+  boardReceipts  BoardReceipt[]
+
+  // Invite codes this user generated
+  invites        Invite[]
+
+  pushSubscriptions PushSubscription[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ───────────────────────────────────────────
+// CIRCLES — replaces Chalkee's rigid 1-on-1.
+// Every connection (1-on-1 or group) is a Circle.
+// A 1-on-1 chat is just a Circle with 2 members and isDirect=true.
+// ───────────────────────────────────────────
+
+model Circle {
+  id        String   @id @default(cuid())
+  name      String? // null for 1-on-1 direct circles (we derive display name from the other member)
+  isDirect  Boolean  @default(false)
+  boardColor String  @default("chalkboard-green") // default board theme for this circle
+  createdAt DateTime @default(now())
+
+  members CircleMember[]
+  boards  Board[]
+  invites Invite[]
+
+  @@map("circles")
+}
+
+model CircleMember {
+  id       String   @id @default(cuid())
+  circleId String
+  userId   String
+  joinedAt DateTime @default(now())
+  role     CircleRole @default(MEMBER)
+
+  circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([circleId, userId])
+  @@map("circle_members")
+}
+
+enum CircleRole {
+  OWNER
+  MEMBER
+}
+
+// Invite codes / links — used to join a Circle (1-on-1 or group)
+model Invite {
+  id        String   @id @default(cuid())
+  code      String   @unique // short shareable code, e.g. "K3F9QZ"
+  circleId  String?  // if null, joining this invite creates a brand-new direct circle with the creator
+  createdBy String
+  maxUses   Int      @default(1) // 1 for direct invites, >1 or 0(=unlimited) for group invites
+  uses      Int      @default(0)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  circle  Circle? @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  creator User    @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("invites")
+}
+
+// ───────────────────────────────────────────
+// BOARDS — the handwritten chalk messages
+// ───────────────────────────────────────────
+
+model Board {
+  id         String   @id @default(cuid())
+  circleId   String
+  senderId   String
+  drawing    Json     // SVG path data: { paths: [{ d, color, width }], background: "..." }
+  boardColor String   @default("chalkboard-green")
+  caption    String?  // optional short text caption (rare, most boards are pure drawing)
+  createdAt  DateTime @default(now())
+
+  circle   Circle         @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  sender   User           @relation("BoardSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receipts BoardReceipt[]
+
+  @@index([circleId, createdAt])
+  @@map("boards")
+}
+
+// Per-recipient read state (needed once boards can go to >1 person in a Circle)
+model BoardReceipt {
+  id       String    @id @default(cuid())
+  boardId  String
+  userId   String
+  seenAt   DateTime?
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+  @@map("board_receipts")
+}
+
+// ───────────────────────────────────────────
+// PUSH NOTIFICATIONS (Web Push API)
+// ───────────────────────────────────────────
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique @db.Text
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}

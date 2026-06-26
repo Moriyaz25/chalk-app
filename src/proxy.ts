@@ -1,0 +1,31 @@
+import { auth } from "@/lib/auth";
+import { NextResponse } from "next/server";
+
+export default auth((req) => {
+  const isLoggedIn = !!req.auth;
+  const isAuthPage = req.nextUrl.pathname.startsWith("/login");
+  const isPublicAsset =
+    req.nextUrl.pathname.startsWith("/api/auth") ||
+    req.nextUrl.pathname.startsWith("/_next") ||
+    req.nextUrl.pathname.startsWith("/icons") ||
+    req.nextUrl.pathname.startsWith("/sw") ||
+    req.nextUrl.pathname.startsWith("/join") ||
+    req.nextUrl.pathname === "/manifest.json";
+
+  if (isPublicAsset) return NextResponse.next();
+
+  if (!isLoggedIn && !isAuthPage) {
+    const loginUrl = new URL("/login", req.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (isLoggedIn && isAuthPage) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
