@@ -109,6 +109,22 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   }
 
+  if (action === "hide") {
+    await prisma.circleMember.update({
+      where: { circleId_userId: { circleId, userId: session.user.id } },
+      data: { hiddenAt: new Date() },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "unhide") {
+    await prisma.circleMember.update({
+      where: { circleId_userId: { circleId, userId: session.user.id } },
+      data: { hiddenAt: null },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   if (action === "block" || action === "unblock") {
     const targetUserId = String(body.userId || "");
     if (!targetUserId || targetUserId === session.user.id || !(await membership(circleId, targetUserId))) {
@@ -181,6 +197,11 @@ export async function PATCH(
     await prisma.invite.deleteMany({
       where: { id: String(body.inviteId || ""), circleId, createdBy: session.user.id },
     });
+  } else if (action === "deleteForever") {
+    if (String(body.confirmation || "").trim().toUpperCase() !== "DELETE") {
+      return NextResponse.json({ error: "Type DELETE to confirm permanent deletion" }, { status: 400 });
+    }
+    await prisma.circle.delete({ where: { id: circleId } });
   } else {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }

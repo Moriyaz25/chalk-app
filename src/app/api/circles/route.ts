@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   const [circles, unreadReceipts, blocks] = await Promise.all([prisma.circle.findMany({
-    where: { members: { some: { userId: session.user.id } } },
+    where: { members: { some: { userId: session.user.id, hiddenAt: null } } },
     include: {
       members: { include: { user: true } },
       boards: {
@@ -59,6 +59,7 @@ export async function GET() {
       boardColor: circle.boardColor,
       memberCount: circle.members.length,
       unreadCount: unreadByCircle.get(circle.id) || 0,
+      currentRole: circle.members.find((m) => m.userId === session.user.id)?.role ?? "MEMBER",
       members: circle.members.map((m) => ({
         id: m.user.id,
         name: m.user.name,

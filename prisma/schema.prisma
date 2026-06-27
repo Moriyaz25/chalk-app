@@ -122,6 +122,7 @@ model CircleMember {
   joinedAt DateTime   @default(now())
   role     CircleRole @default(MEMBER)
   muted    Boolean    @default(false)
+  hiddenAt DateTime?
 
   circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

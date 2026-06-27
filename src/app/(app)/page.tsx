@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PenLine, Plus, Sparkles, UserPlus } from "lucide-react";
 import { CircleCard, type CircleSummary } from "@/components/board/CircleCard";
@@ -8,12 +8,16 @@ import { CircleCard, type CircleSummary } from "@/components/board/CircleCard";
 export default function HomePage() {
   const [circles, setCircles] = useState<CircleSummary[] | null>(null);
 
-  useEffect(() => {
+  const loadCircles = useCallback(() => {
     fetch("/api/circles")
       .then((res) => res.json())
       .then((data) => setCircles(data.circles))
       .catch(() => setCircles([]));
   }, []);
+
+  useEffect(() => {
+    loadCircles();
+  }, [loadCircles]);
 
   return (
     <div className="mx-auto max-w-md px-4 pb-6 pt-[max(1.25rem,env(safe-area-inset-top))]">
@@ -69,7 +73,7 @@ export default function HomePage() {
       {circles && circles.length > 0 && (
         <div className="space-y-2.5">
           {circles.map((circle) => (
-            <CircleCard key={circle.id} circle={circle} />
+            <CircleCard key={circle.id} circle={circle} onChanged={loadCircles} />
           ))}
         </div>
       )}
