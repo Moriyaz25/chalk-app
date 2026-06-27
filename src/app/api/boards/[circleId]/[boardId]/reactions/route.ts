@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
 import { isBlockedPair } from "@/lib/safety";
 
-const ALLOWED = new Set(["❤️", "🥹", "😂", "💋", "✨", "🫶"]);
+const ALLOWED = new Set(["❤️", "🥹", "😂", "😘", "✨", "🫶"]);
+const SAFE_REACTION = /^[^\p{Cc}\p{Cs}]{1,16}$/u;
 
 export async function POST(
   req: Request,
@@ -14,7 +15,9 @@ export async function POST(
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { circleId, boardId } = await params;
   const { emoji } = await req.json();
-  if (!ALLOWED.has(emoji)) return NextResponse.json({ error: "Invalid reaction" }, { status: 400 });
+  if (typeof emoji !== "string" || (!ALLOWED.has(emoji) && !SAFE_REACTION.test(emoji))) {
+    return NextResponse.json({ error: "Invalid reaction" }, { status: 400 });
+  }
 
   const board = await prisma.board.findFirst({
     where: { id: boardId, circleId, circle: { members: { some: { userId: session.user.id } } } },
