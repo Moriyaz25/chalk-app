@@ -20,7 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async session({ session, user }: { session: Session; user: User }) {
       if (session.user) {
-        session.user.id = user.id;
+        session.user.id = user.id!;
         session.user.username = (user as User & { username?: string | null }).username;
       }
       return session;
