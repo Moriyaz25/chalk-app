@@ -30,18 +30,64 @@ export async function GET(
   const limit = 20;
 
   const boards = await prisma.board.findMany({
-    where: { circleId },
+    where: {
+      circleId,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-    include: {
+    select: {
+      id: true,
+      circleId: true,
+      senderId: true,
+      drawing: true,
+      boardColor: true,
+      caption: true,
+      kind: true,
+      deliveryMode: true,
+      unlockAt: true,
+      expiresAt: true,
+      viewOnce: true,
+      prompt: true,
+      gift: true,
+      isPinned: true,
+      replyToId: true,
+      createdAt: true,
       sender: { select: { id: true, name: true, image: true } },
       receipts: { where: { userId: session.user.id } },
+      reactions: {
+        include: { user: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 
+  const now = new Date();
+  const safeBoards = boards.map((board) => {
+    const receipt = board.receipts[0];
+    const isSender = board.senderId === session.user.id;
+    const timeLocked = !!board.unlockAt && board.unlockAt > now;
+    const consumed = board.viewOnce && !!receipt?.openedAt && !isSender;
+    const locked = timeLocked || consumed;
+
+    return {
+      ...board,
+      drawing: locked ? { strokes: [], viewBox: { width: 600, height: 600 } } : board.drawing,
+      media:
+        locked || (board.kind !== "photo" && board.kind !== "voice")
+          ? null
+          : {
+              type: board.kind,
+            },
+      locked,
+      lockReason: timeLocked ? "scheduled" : consumed ? "viewed" : null,
+      currentUserId: session.user.id,
+    };
+  });
+
   return NextResponse.json({
-    boards,
+    boards: safeBoards,
     nextCursor: boards.length === limit ? boards[boards.length - 1].id : null,
   });
 }
@@ -62,10 +108,45 @@ export async function POST(
   }
 
   const body = await req.json();
-  const { drawing, boardColor, caption } = body;
+  const {
+    drawing,
+    boardColor,
+    caption,
+    kind,
+    deliveryMode,
+    unlockAt,
+    expiresAt,
+    viewOnce,
+    media,
+    prompt,
+    gift,
+    replyToId,
+  } = body;
 
   if (!drawing?.strokes || !Array.isArray(drawing.strokes)) {
     return NextResponse.json({ error: "Invalid drawing payload" }, { status: 400 });
+  }
+
+  if (JSON.stringify(body).length > 2_500_000) {
+    return NextResponse.json({ error: "Message is too large" }, { status: 413 });
+  }
+
+  if (media) {
+    const validMedia =
+      (media.type === "photo" && String(media.dataUrl).startsWith("data:image/")) ||
+      (media.type === "voice" && String(media.dataUrl).startsWith("data:audio/"));
+    if (!validMedia || String(media.dataUrl).length > 2_000_000) {
+      return NextResponse.json({ error: "Invalid or oversized media" }, { status: 400 });
+    }
+  }
+
+  const parsedUnlockAt = unlockAt ? new Date(unlockAt) : null;
+  const parsedExpiresAt = expiresAt ? new Date(expiresAt) : null;
+  if (parsedUnlockAt && Number.isNaN(parsedUnlockAt.getTime())) {
+    return NextResponse.json({ error: "Invalid unlock date" }, { status: 400 });
+  }
+  if (parsedExpiresAt && Number.isNaN(parsedExpiresAt.getTime())) {
+    return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 });
   }
 
   const members = await prisma.circleMember.findMany({
@@ -80,13 +161,23 @@ export async function POST(
       drawing,
       boardColor: boardColor ?? "chalkboard-green",
       caption: caption ?? null,
+      kind: kind ?? "chalk",
+      deliveryMode: deliveryMode ?? "normal",
+      unlockAt: parsedUnlockAt,
+      expiresAt: parsedExpiresAt,
+      viewOnce: !!viewOnce,
+      media: media ?? undefined,
+      prompt: prompt?.slice(0, 180) || null,
+      gift: gift?.slice(0, 40) || null,
+      replyToId: replyToId || null,
       receipts: {
         create: members
           .filter((m) => m.userId !== session.user.id)
           .map((m) => ({ userId: m.userId })),
       },
     },
-    include: {
+    select: {
+      id: true,
       sender: { select: { id: true, name: true, image: true } },
     },
   });
@@ -94,7 +185,12 @@ export async function POST(
   // Fire-and-forget push notification to everyone else in the circle.
   sendPushToCircle(circleId, session.user.id, {
     title: `${session.user.name ?? "Someone"} left you a message`,
-    body: "Tap to see what's on the board.",
+    body:
+      deliveryMode === "secret"
+        ? "A secret chalk is waiting. Rub to reveal it."
+        : parsedUnlockAt && parsedUnlockAt > new Date()
+          ? "A time capsule is waiting for you."
+          : "Tap to see what's on the board.",
     url: `/board/${circleId}`,
     circleId,
     boardId: board.id,

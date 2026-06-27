@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { type Session, type User } from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
@@ -18,11 +18,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   callbacks: {
-    async session({ session, user }) {
+    async session({ session, user }: { session: Session; user: User }) {
       if (session.user) {
         session.user.id = user.id;
-        // @ts-expect-error — augmented in next-auth.d.ts
-        session.user.username = user.username;
+        session.user.username = (user as User & { username?: string | null }).username;
       }
       return session;
     },

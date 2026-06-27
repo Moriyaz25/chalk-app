@@ -36,6 +36,26 @@ export type ChalkDrawing = {
   viewBox: { width: number; height: number };
 };
 
+export type BoardMedia = {
+  type: "photo" | "voice";
+  dataUrl?: string;
+  name?: string;
+  duration?: number;
+  bytes?: number;
+};
+
+export type BoardExperience = {
+  kind: "chalk" | "photo" | "voice" | "gift" | "prompt";
+  deliveryMode: "normal" | "secret" | "capsule" | "open-when";
+  unlockAt: string;
+  expiresIn: "never" | "1h" | "24h" | "7d";
+  viewOnce: boolean;
+  prompt: string;
+  gift: string;
+  media: BoardMedia | null;
+  replyToId?: string;
+};
+
 export const BOARD_VIEWBOX = { width: 600, height: 600 };
 
 export const BOARD_COLORS = {

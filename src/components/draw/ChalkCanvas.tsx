@@ -23,6 +23,7 @@ type ChalkCanvasProps = {
   onStrokesChange?: (count: number) => void;
   onSelectText?: (id: string | null) => void;
   onMoveText?: (id: string, x: number, y: number) => void;
+  initialStrokes?: ChalkStroke[];
 };
 
 export type ChalkCanvasHandle = {
@@ -31,6 +32,7 @@ export type ChalkCanvasHandle = {
   redo: () => void;
   getStrokes: () => ChalkStroke[];
   isEmpty: () => boolean;
+  loadStrokes: (strokes: ChalkStroke[]) => void;
 };
 
 // Converts a sequence of points into a smooth SVG path using quadratic
@@ -72,11 +74,12 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
       onStrokesChange,
       onSelectText,
       onMoveText,
+      initialStrokes = [],
     },
     ref
   ) {
     const svgRef = useRef<SVGSVGElement>(null);
-    const [strokes, setStrokes] = useState<ChalkStroke[]>([]);
+    const [strokes, setStrokes] = useState<ChalkStroke[]>(initialStrokes);
     const [, setRedoStack] = useState<ChalkStroke[]>([]);
     const currentPoints = useRef<Point[]>([]);
     const [liveStroke, setLiveStroke] = useState<ChalkStroke | null>(null);
@@ -198,6 +201,11 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
       },
       getStrokes: () => strokes,
       isEmpty: () => strokes.length === 0,
+      loadStrokes: (next) => {
+        setStrokes(next);
+        setRedoStack([]);
+        onStrokesChange?.(next.length);
+      },
     }));
 
     const handleTextPointerDown = useCallback(

@@ -11,10 +11,10 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { boardId } = await params;
+  const { circleId, boardId } = await params;
 
   await prisma.boardReceipt.updateMany({
-    where: { boardId, userId: session.user.id, seenAt: null },
+    where: { boardId, userId: session.user.id, board: { circleId } },
     data: { seenAt: new Date() },
   });
 

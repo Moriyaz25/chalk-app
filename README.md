@@ -126,9 +126,10 @@ public/
   icons/
 ```
 
-## Next steps / ideas not yet built
+## Personal-space features
 
-- Real-time typing/drawing presence (see the other person's strokes live as they draw, via WebSockets) — was considered, but Web Push was chosen per the original spec for the "always visible without opening the app" feel
-- Replying inline on the same board vs. starting a fresh one
-- Custom per-circle themes/wallpapers beyond the 4 board colors
-- Reactions on a board (a quick chalk doodle reply)
+- Secret rub-to-reveal, view-once, disappearing, scheduled, and “open when” boards
+- Photo doodles, voice scribbles, digital gifts, and rotating drawing prompts
+- Chalk reactions, shared streaks, pinned memory walls, and pass-the-doodle replies
+- Per-circle emoji, nickname, mood, shared song, and accent color
+- Lightweight shared canvases that sync an in-progress draft between circle members

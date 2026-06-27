@@ -23,21 +23,23 @@ model User {
   createdAt     DateTime  @default(now())
 
   // app-specific
-  username      String?   @unique // short handle shown in invite contexts
-  chalkColor    String    @default("#F2E9D8") // signature chalk color the user draws with by default
+  username   String? @unique // short handle shown in invite contexts
+  chalkColor String  @default("#F2E9D8") // signature chalk color the user draws with by default
 
-  accounts      Account[]
-  sessions      Session[]
+  accounts Account[]
+  sessions Session[]
 
   // Circles (groups) this user belongs to
-  memberships   CircleMember[]
+  memberships CircleMember[]
 
   // Boards sent and received
-  sentBoards     Board[]        @relation("BoardSender")
+  sentBoards     Board[]         @relation("BoardSender")
   boardReceipts  BoardReceipt[]
+  boardReactions BoardReaction[]
+  updatedDrafts  CircleDraft[]   @relation("DraftUpdater")
 
   // Invite codes this user generated
-  invites        Invite[]
+  invites Invite[]
 
   pushSubscriptions PushSubscription[]
 
@@ -91,24 +93,26 @@ model VerificationToken {
 // ───────────────────────────────────────────
 
 model Circle {
-  id        String   @id @default(cuid())
-  name      String? // null for 1-on-1 direct circles (we derive display name from the other member)
-  isDirect  Boolean  @default(false)
-  boardColor String  @default("chalkboard-green") // default board theme for this circle
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  name       String? // null for 1-on-1 direct circles (we derive display name from the other member)
+  isDirect   Boolean  @default(false)
+  boardColor String   @default("chalkboard-green") // default board theme for this circle
+  vibe       Json? // nicknames, emoji, shared mood/song, and visual theme
+  createdAt  DateTime @default(now())
 
   members CircleMember[]
   boards  Board[]
   invites Invite[]
+  draft   CircleDraft?
 
   @@map("circles")
 }
 
 model CircleMember {
-  id       String   @id @default(cuid())
+  id       String     @id @default(cuid())
   circleId String
   userId   String
-  joinedAt DateTime @default(now())
+  joinedAt DateTime   @default(now())
   role     CircleRole @default(MEMBER)
 
   circle Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
@@ -125,14 +129,14 @@ enum CircleRole {
 
 // Invite codes / links — used to join a Circle (1-on-1 or group)
 model Invite {
-  id        String   @id @default(cuid())
-  code      String   @unique // short shareable code, e.g. "K3F9QZ"
-  circleId  String?  // if null, joining this invite creates a brand-new direct circle with the creator
+  id        String    @id @default(cuid())
+  code      String    @unique // short shareable code, e.g. "K3F9QZ"
+  circleId  String? // if null, joining this invite creates a brand-new direct circle with the creator
   createdBy String
-  maxUses   Int      @default(1) // 1 for direct invites, >1 or 0(=unlimited) for group invites
-  uses      Int      @default(0)
+  maxUses   Int       @default(1) // 1 for direct invites, >1 or 0(=unlimited) for group invites
+  uses      Int       @default(0)
   expiresAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   circle  Circle? @relation(fields: [circleId], references: [id], onDelete: Cascade)
   creator User    @relation(fields: [createdBy], references: [id], onDelete: Cascade)
@@ -145,17 +149,30 @@ model Invite {
 // ───────────────────────────────────────────
 
 model Board {
-  id         String   @id @default(cuid())
-  circleId   String
-  senderId   String
-  drawing    Json     // SVG path data: { paths: [{ d, color, width }], background: "..." }
-  boardColor String   @default("chalkboard-green")
-  caption    String?  // optional short text caption (rare, most boards are pure drawing)
-  createdAt  DateTime @default(now())
+  id           String    @id @default(cuid())
+  circleId     String
+  senderId     String
+  drawing      Json // SVG path data: { paths: [{ d, color, width }], background: "..." }
+  boardColor   String    @default("chalkboard-green")
+  caption      String? // optional short text caption (rare, most boards are pure drawing)
+  kind         String    @default("chalk") // chalk, photo, voice, gift, or prompt
+  deliveryMode String    @default("normal") // normal, secret, capsule, or open-when
+  unlockAt     DateTime?
+  expiresAt    DateTime?
+  viewOnce     Boolean   @default(false)
+  media        Json? // compressed photo or voice data + metadata
+  prompt       String?
+  gift         String?
+  isPinned     Boolean   @default(false)
+  replyToId    String?
+  createdAt    DateTime  @default(now())
 
-  circle   Circle         @relation(fields: [circleId], references: [id], onDelete: Cascade)
-  sender   User           @relation("BoardSender", fields: [senderId], references: [id], onDelete: Cascade)
-  receipts BoardReceipt[]
+  circle    Circle          @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  sender    User            @relation("BoardSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receipts  BoardReceipt[]
+  reactions BoardReaction[]
+  replyTo   Board?          @relation("BoardReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Board[]         @relation("BoardReplies")
 
   @@index([circleId, createdAt])
   @@map("boards")
@@ -167,12 +184,40 @@ model BoardReceipt {
   boardId  String
   userId   String
   seenAt   DateTime?
+  openedAt DateTime?
 
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([boardId, userId])
   @@map("board_receipts")
+}
+
+model BoardReaction {
+  id        String   @id @default(cuid())
+  boardId   String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId, emoji])
+  @@index([boardId])
+  @@map("board_reactions")
+}
+
+model CircleDraft {
+  circleId  String   @id
+  drawing   Json
+  updatedBy String
+  updatedAt DateTime @updatedAt
+
+  circle  Circle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  updater User   @relation("DraftUpdater", fields: [updatedBy], references: [id], onDelete: Cascade)
+
+  @@map("circle_drafts")
 }
 
 // ───────────────────────────────────────────
