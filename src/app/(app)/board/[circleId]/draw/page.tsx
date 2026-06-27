@@ -17,10 +17,16 @@ export default async function DrawPage({
   const { circleId } = await params;
   const { replyTo } = await searchParams;
 
-  const circle = await prisma.circle.findUnique({
-    where: { id: circleId },
-    include: { members: { include: { user: true } } },
-  });
+  const [circle, currentUser] = await Promise.all([
+    prisma.circle.findUnique({
+      where: { id: circleId },
+      include: { members: { include: { user: true } } },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { chalkColor: true },
+    }),
+  ]);
 
   if (!circle) notFound();
 
@@ -45,6 +51,7 @@ export default async function DrawPage({
       circleName={displayName ?? "them"}
       initialDrawing={(source?.drawing as ChalkDrawing | undefined) ?? null}
       replyToId={source ? replyTo : undefined}
+      initialColor={currentUser?.chalkColor}
     />
   );
 }

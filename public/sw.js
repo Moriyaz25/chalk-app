@@ -3,8 +3,8 @@
 // NOTE: this is a hand-written SW (no Workbox) to keep full control over push payloads
 // and avoid the cache-size build issues that come with auto-generated PWA tooling.
 
-const CACHE_NAME = "chalk-static-v1";
-const STATIC_ASSETS = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE_NAME = "chalk-static-v2";
+const STATIC_ASSETS = ["/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -24,20 +24,29 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first for navigation, cache-first fallback for static assets.
+// Cache only public, immutable assets. Authenticated pages and API responses must never
+// be persisted because another account can use the same browser profile later.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  const cacheable =
+    url.origin === self.location.origin &&
+    (url.pathname.startsWith("/_next/static/") ||
+      url.pathname.startsWith("/icons/") ||
+      url.pathname === "/manifest.json");
+  if (!cacheable) return;
 
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
+  event.respondWith(caches.match(request).then((cached) => {
+    if (cached) return cached;
+    return fetch(request).then((response) => {
+      if (response.ok) {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        return response;
-      })
-      .catch(() => caches.match(request))
-  );
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
+      }
+      return response;
+    });
+  }));
 });
 
 // ── Push notifications ──

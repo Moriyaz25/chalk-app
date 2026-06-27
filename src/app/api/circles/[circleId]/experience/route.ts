@@ -79,6 +79,12 @@ export async function PATCH(
     mood: String(body.mood || "").slice(0, 60),
     song: String(body.song || "").slice(0, 100),
     accent: String(body.accent || "#e89b95").slice(0, 16),
+    relationshipLabel: String(body.relationshipLabel || "").slice(0, 40),
+    specialDate: String(body.specialDate || "").slice(0, 10),
+    coverUrl:
+      /^https?:\/\//.test(String(body.coverUrl || ""))
+        ? String(body.coverUrl).slice(0, 500)
+        : "",
   };
   await prisma.circle.update({ where: { id: circleId }, data: { vibe } });
   return NextResponse.json({ vibe });

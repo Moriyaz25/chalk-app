@@ -17,6 +17,15 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const mode = body.mode === "group" ? "group" : "direct";
+  const recentInvites = await prisma.invite.count({
+    where: {
+      createdBy: session.user.id,
+      createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
+    },
+  });
+  if (recentInvites >= 20) {
+    return NextResponse.json({ error: "Invite limit reached. Try again later." }, { status: 429 });
+  }
 
   let circleId: string | null = null;
 
@@ -26,8 +35,8 @@ export async function POST(req: Request) {
       const membership = await prisma.circleMember.findUnique({
         where: { circleId_userId: { circleId: body.circleId, userId: session.user.id } },
       });
-      if (!membership) {
-        return NextResponse.json({ error: "Not a member of this circle" }, { status: 403 });
+      if (!membership || membership.role !== "OWNER") {
+        return NextResponse.json({ error: "Only the circle owner can create invites" }, { status: 403 });
       }
       circleId = body.circleId;
     } else {
@@ -50,7 +59,10 @@ export async function POST(req: Request) {
       code: generateCode(),
       circleId, // null for direct invites — accepting creates a fresh 1-on-1 circle
       createdBy: session.user.id,
-      maxUses: mode === "group" ? body.maxUses ?? 0 : 1, // 0 = unlimited
+      maxUses:
+        mode === "group"
+          ? Math.max(0, Math.min(100, Number(body.maxUses ?? 0) || 0))
+          : 1,
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     },
   });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isBlockedPair } from "@/lib/safety";
 
 export async function POST(
   _req: Request,
@@ -23,6 +24,9 @@ export async function POST(
     select: { id: true, senderId: true, viewOnce: true },
   });
   if (!board) return NextResponse.json({ error: "Unavailable" }, { status: 404 });
+  if (await isBlockedPair(session.user.id, board.senderId)) {
+    return NextResponse.json({ error: "Unavailable" }, { status: 404 });
+  }
 
   if (board.senderId !== session.user.id) {
     await prisma.boardReceipt.updateMany({

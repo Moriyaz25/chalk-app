@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
+import { AppLockGuard } from "@/components/AppLockGuard";
 
 export const metadata: Metadata = {
   title: "Chalk — handwritten messages for your people",
@@ -28,7 +29,8 @@ const themeScript = `
   try {
     const stored = localStorage.getItem("chalk-theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    document.documentElement.dataset.theme = stored || (prefersDark ? "dark" : "light");
+    document.documentElement.dataset.theme =
+      stored === "dark" || (stored !== "light" && prefersDark) ? "dark" : "light";
   } catch {
     document.documentElement.dataset.theme = "light";
   }
@@ -46,7 +48,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <ThemeProvider>
           <ServiceWorkerRegister />
-          {children}
+          <AppLockGuard>{children}</AppLockGuard>
         </ThemeProvider>
       </body>
     </html>

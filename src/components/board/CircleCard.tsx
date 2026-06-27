@@ -8,6 +8,7 @@ export type CircleSummary = {
   name: string;
   isDirect: boolean;
   memberCount: number;
+  unreadCount: number;
   members: { id: string; name: string | null; image: string | null }[];
   latestBoard: { id: string; senderName: string | null; createdAt: string } | null;
 };
@@ -55,7 +56,11 @@ export function CircleCard({ circle }: { circle: CircleSummary }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <p className="font-medium text-ink truncate">{circle.name}</p>
-          {circle.latestBoard && (
+          {circle.unreadCount > 0 ? (
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-dust-pink px-1.5 text-[11px] font-bold text-white">
+              {circle.unreadCount > 99 ? "99+" : circle.unreadCount}
+            </span>
+          ) : circle.latestBoard && (
             <span className="text-xs text-ink-soft/60 shrink-0">
               {timeAgo(circle.latestBoard.createdAt)}
             </span>

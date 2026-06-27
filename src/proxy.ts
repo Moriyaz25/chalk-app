@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
+  const needsProfile = isLoggedIn && !req.auth?.user?.username;
   const isAuthPage = req.nextUrl.pathname.startsWith("/login");
   const isPublicAsset =
     req.nextUrl.pathname.startsWith("/api/auth") ||
@@ -21,6 +22,14 @@ export default auth((req) => {
 
   if (isLoggedIn && isAuthPage) {
     return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  const isAppPage =
+    req.nextUrl.pathname === "/" ||
+    req.nextUrl.pathname.startsWith("/board/") ||
+    req.nextUrl.pathname.startsWith("/circles/");
+  if (needsProfile && isAppPage) {
+    return NextResponse.redirect(new URL("/settings", req.url));
   }
 
   return NextResponse.next();

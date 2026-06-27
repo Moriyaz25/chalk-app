@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isBlockedPair } from "@/lib/safety";
 
 export async function GET(
   _req: Request,
@@ -32,6 +33,9 @@ export async function GET(
   });
 
   if (!board?.media) return NextResponse.json({ error: "No media" }, { status: 404 });
+  if (await isBlockedPair(session.user.id, board.senderId)) {
+    return NextResponse.json({ error: "Unavailable" }, { status: 404 });
+  }
   if ((board.unlockAt && board.unlockAt > now) || (board.expiresAt && board.expiresAt <= now)) {
     return NextResponse.json({ error: "Unavailable" }, { status: 410 });
   }

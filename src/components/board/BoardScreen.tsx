@@ -5,8 +5,10 @@ import Link from "next/link";
 import {
   ChevronLeft,
   Clock3,
+  CalendarDays,
   Flame,
   Heart,
+  Image as ImageIcon,
   LayoutGrid,
   LockKeyhole,
   MemoryStick,
@@ -17,6 +19,7 @@ import {
   Pencil,
   Pin,
   Reply,
+  Search,
   Settings2,
   Sparkles,
   Square,
@@ -30,6 +33,13 @@ import {
   type ChalkDrawing,
 } from "@/types/chalk";
 import clsx from "clsx";
+import dynamic from "next/dynamic";
+import { ChatTimeline, type ChatBoard } from "@/components/board/ChatTimeline";
+
+const CircleManagement = dynamic(
+  () => import("@/components/board/CircleManagement").then((module) => module.CircleManagement),
+  { loading: () => <div className="h-32 animate-pulse rounded-2xl bg-ink/5" /> }
+);
 
 type Reaction = {
   id: string;
@@ -56,9 +66,18 @@ type BoardItem = {
   locked: boolean;
   lockReason: "scheduled" | "viewed" | null;
   currentUserId: string;
+  seenCount: number;
+  silent: boolean;
+  editedAt: string | null;
   createdAt: string;
   sender: { id: string; name: string | null; image: string | null };
   reactions: Reaction[];
+  replyTo: {
+    id: string;
+    kind: string;
+    caption: string | null;
+    sender: { name: string | null };
+  } | null;
 };
 
 type Vibe = {
@@ -67,6 +86,9 @@ type Vibe = {
   mood?: string;
   song?: string;
   accent?: string;
+  relationshipLabel?: string;
+  specialDate?: string;
+  coverUrl?: string;
 };
 
 type Experience = {
@@ -76,7 +98,7 @@ type Experience = {
   pinned: number;
 };
 
-type ViewMode = "single" | "grid" | "memories";
+type ViewMode = "chat" | "single" | "grid" | "memories";
 const REACTIONS = ["❤️", "🥹", "😂", "💋", "✨", "🫶"];
 
 export function BoardScreen({
@@ -88,8 +110,9 @@ export function BoardScreen({
 }) {
   const [boards, setBoards] = useState<BoardItem[] | null>(null);
   const [experience, setExperience] = useState<Experience | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("single");
+  const [viewMode, setViewMode] = useState<ViewMode>("chat");
   const [showVibe, setShowVibe] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -105,7 +128,7 @@ export function BoardScreen({
     setExperience(experienceData);
 
     if (boardData.boards?.length > 0) {
-      fetch(`/api/boards/${circleId}/${boardData.boards[0].id}/seen`, {
+      fetch(`/api/circles/${circleId}/read`, {
         method: "POST",
       }).catch(() => {});
     }
@@ -118,10 +141,26 @@ export function BoardScreen({
     return () => window.cancelAnimationFrame(frame);
   }, [load]);
 
-  const visibleBoards = useMemo(
-    () => (viewMode === "memories" ? boards?.filter((board) => board.isPinned) : boards),
-    [boards, viewMode]
-  );
+  useEffect(() => {
+    if (viewMode !== "chat") return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 4_000);
+    return () => window.clearInterval(timer);
+  }, [load, viewMode]);
+
+  const visibleBoards = useMemo(() => {
+    const moments = boards?.filter((board) => board.kind !== "text");
+    const source = viewMode === "memories" ? moments?.filter((board) => board.isPinned) : moments;
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return source;
+    return source?.filter((board) => {
+      const date = new Date(board.createdAt).toLocaleDateString();
+      return [board.sender.name, board.caption, board.prompt, board.kind, date]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase().includes(query));
+    });
+  }, [boards, searchQuery, viewMode]);
   const latest = visibleBoards?.[0];
   const displayName = experience?.vibe.nickname || circleName;
   const accent = experience?.vibe.accent || "#e89b95";
@@ -129,6 +168,13 @@ export function BoardScreen({
   return (
     <div className="min-h-dvh bg-paper text-ink">
       <header className="sticky top-0 z-20 border-b border-line/70 bg-paper/90 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        {experience?.vibe.coverUrl && (
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-full overflow-hidden opacity-[0.08]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={experience.vibe.coverUrl} alt="" className="h-full w-full object-cover" />
+          </div>
+        )}
+        <div className="relative">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink/5 text-ink-soft active:scale-90" aria-label="Back">
@@ -139,7 +185,7 @@ export function BoardScreen({
                 {experience?.vibe.emoji || "🫶"} {displayName}
               </p>
               <p className="mt-1 truncate text-[11px] text-ink-soft/60">
-                {experience?.vibe.mood || "a quiet little space for your people"}
+                {experience?.vibe.relationshipLabel || experience?.vibe.mood || "a quiet little space for your people"}
               </p>
             </div>
           </div>
@@ -160,18 +206,46 @@ export function BoardScreen({
             <span className="truncate">our song · {experience.vibe.song}</span>
           </div>
         )}
+        {experience?.vibe.specialDate && (
+          <div className="mt-2 flex items-center gap-2 rounded-full bg-ink/[0.04] px-3 py-1.5 text-[11px] text-ink-soft">
+            <CalendarDays size={12} style={{ color: accent }} />
+            <span>{specialDateLabel(experience.vibe.specialDate)}</span>
+          </div>
+        )}
 
-        <div className="mt-3 flex items-center justify-center gap-1">
+        <div className="mt-3 flex items-center justify-center gap-0.5 overflow-x-auto">
+          <ViewButton active={viewMode === "chat"} label="Chat" icon={<MessageCircleHeart size={15} />} onClick={() => setViewMode("chat")} />
           <ViewButton active={viewMode === "single"} label="Latest" icon={<Square size={15} />} onClick={() => setViewMode("single")} />
           <ViewButton active={viewMode === "grid"} label="All" icon={<LayoutGrid size={15} />} onClick={() => setViewMode("grid")} />
           <ViewButton active={viewMode === "memories"} label="Memories" icon={<MemoryStick size={15} />} onClick={() => setViewMode("memories")} />
         </div>
+        </div>
       </header>
 
       <main className="mx-auto max-w-2xl px-4 pb-32 pt-4">
+        {viewMode !== "single" && viewMode !== "chat" && (
+          <label className="mb-4 flex items-center gap-2 rounded-full border border-line bg-card px-4 py-2.5 text-ink-soft shadow-sm">
+            <Search size={15} />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search person, caption, prompt, or date"
+              className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-soft/45"
+            />
+          </label>
+        )}
         {boards === null && <div className="aspect-square animate-pulse rounded-3xl bg-ink/5" />}
 
-        {visibleBoards?.length === 0 && (
+        {viewMode === "chat" && boards && (
+          <ChatTimeline
+            circleId={circleId}
+            boards={boards as ChatBoard[]}
+            onChanged={load}
+            onOpenMoments={() => setViewMode("single")}
+          />
+        )}
+
+        {viewMode !== "chat" && visibleBoards?.length === 0 && (
           <div className="mt-16 flex flex-col items-center gap-3 text-center">
             <p className="text-4xl">{viewMode === "memories" ? "📌" : "✍️"}</p>
             <p className="font-hand text-3xl text-ink">
@@ -198,10 +272,12 @@ export function BoardScreen({
         )}
       </main>
 
-      <Link href={`/board/${circleId}/draw`} className="fixed bottom-6 right-5 z-20 flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-paper shadow-xl active:scale-95">
-        <Pencil size={18} />
-        <span className="text-sm font-medium">Leave a chalk</span>
-      </Link>
+      {viewMode !== "chat" && (
+        <Link href={`/board/${circleId}/draw`} className="fixed bottom-6 right-5 z-20 flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-paper shadow-xl active:scale-95">
+          <Pencil size={18} />
+          <span className="text-sm font-medium">Leave a chalk</span>
+        </Link>
+      )}
 
       {showVibe && (
         <VibeEditor circleId={circleId} initial={experience?.vibe ?? {}} onClose={() => setShowVibe(false)} onSaved={load} />
@@ -325,6 +401,7 @@ function BoardMoment({
         <p className="min-w-0 truncate text-xs text-ink-soft/60">
           {mine ? "you" : board.sender.name || "someone"} · {new Date(board.createdAt).toLocaleString()}
           {board.expiresAt && ` · fades ${new Date(board.expiresAt).toLocaleString()}`}
+          {mine && board.seenCount > 0 && ` · seen by ${board.seenCount}`}
         </p>
         {!board.locked && (
           <Link href={`/board/${circleId}/draw?replyTo=${board.id}`} className="flex shrink-0 items-center gap-1 text-xs text-ink-soft">
@@ -477,6 +554,9 @@ function VibeEditor({
     mood: initial.mood || "",
     song: initial.song || "",
     accent: initial.accent || "#e89b95",
+    relationshipLabel: initial.relationshipLabel || "",
+    specialDate: initial.specialDate || "",
+    coverUrl: initial.coverUrl || "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -494,7 +574,7 @@ function VibeEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/45 p-3 backdrop-blur-sm sm:items-center sm:justify-center">
-      <div className="w-full max-w-md space-y-4 rounded-3xl bg-paper p-5 shadow-2xl">
+      <div className="max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-3xl bg-paper p-5 shadow-2xl">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-hand text-3xl">Make it yours</p>
@@ -511,6 +591,18 @@ function VibeEditor({
           <input value={vibe.mood} onChange={(event) => setVibe({ ...vibe, mood: event.target.value })} placeholder="today's shared mood" className="w-full bg-transparent py-3 text-sm outline-none" />
         </label>
         <label className="flex items-center gap-2 rounded-2xl border border-line bg-card px-3">
+          <Heart size={15} className="text-dust-pink" />
+          <input value={vibe.relationshipLabel} onChange={(event) => setVibe({ ...vibe, relationshipLabel: event.target.value })} placeholder="besties · partners · our tiny world" className="w-full bg-transparent py-3 text-sm outline-none" />
+        </label>
+        <label className="flex items-center gap-2 rounded-2xl border border-line bg-card px-3">
+          <CalendarDays size={15} className="text-chalk-amber" />
+          <input type="date" value={vibe.specialDate} onChange={(event) => setVibe({ ...vibe, specialDate: event.target.value })} className="w-full bg-transparent py-3 text-sm outline-none" />
+        </label>
+        <label className="flex items-center gap-2 rounded-2xl border border-line bg-card px-3">
+          <ImageIcon size={15} className="text-chalk-mint" />
+          <input value={vibe.coverUrl} onChange={(event) => setVibe({ ...vibe, coverUrl: event.target.value })} placeholder="Shared cover photo URL" className="w-full bg-transparent py-3 text-sm outline-none" />
+        </label>
+        <label className="flex items-center gap-2 rounded-2xl border border-line bg-card px-3">
           <Music2 size={15} className="text-chalk-sky" />
           <input value={vibe.song} onChange={(event) => setVibe({ ...vibe, song: event.target.value })} placeholder="your song · artist" className="w-full bg-transparent py-3 text-sm outline-none" />
         </label>
@@ -522,7 +614,17 @@ function VibeEditor({
         <button onClick={save} disabled={saving} className="w-full rounded-full bg-ink py-3 text-sm font-semibold text-paper disabled:opacity-50">
           {saving ? "Saving your space…" : "Save our space"}
         </button>
+        <CircleManagement circleId={circleId} />
       </div>
     </div>
   );
+}
+
+function specialDateLabel(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "Our special date";
+  const days = Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+  if (days > 0) return `${days} day${days === 1 ? "" : "s"} until our date`;
+  const years = Math.max(0, new Date().getFullYear() - date.getFullYear());
+  return years > 0 ? `${years} year${years === 1 ? "" : "s"} of us` : "Our special date";
 }

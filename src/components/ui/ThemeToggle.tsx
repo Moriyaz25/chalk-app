@@ -4,6 +4,7 @@ import { Moon, Sun } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import {
   getCurrentTheme,
+  getThemePreference,
   setStoredTheme,
   subscribeToTheme,
 } from "@/components/ui/ThemeProvider";
@@ -34,5 +35,25 @@ export function ThemeToggle() {
         <Moon size={15} className={isDark ? "text-chalk-sky" : "text-ink-soft/50"} />
       </span>
     </button>
+  );
+}
+
+export function ThemeModeSelect() {
+  const preference = useSyncExternalStore(
+    subscribeToTheme,
+    getThemePreference,
+    () => "system" as const
+  );
+  return (
+    <select
+      value={preference}
+      onChange={(event) => setStoredTheme(event.target.value as "light" | "dark" | "system")}
+      aria-label="Color theme"
+      className="rounded-full border border-line bg-card-muted px-3 py-2 text-xs font-semibold text-ink outline-none"
+    >
+      <option value="system">System</option>
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+    </select>
   );
 }

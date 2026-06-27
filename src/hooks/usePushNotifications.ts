@@ -17,6 +17,22 @@ type PushStatus = "unsupported" | "unsubscribed" | "subscribed" | "denied" | "lo
 
 export function usePushNotifications() {
   const [status, setStatus] = useState<PushStatus>("loading");
+  const [error, setError] = useState("");
+
+  const saveSubscription = useCallback(async (subscription: PushSubscription) => {
+    const response = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...subscription.toJSON(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || "Could not register this device.");
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,14 +49,21 @@ export function usePushNotifications() {
         if (cancelled) return;
 
         if (subscription) {
-          setStatus("subscribed");
+          await saveSubscription(subscription);
+          if (!cancelled) {
+            setStatus("subscribed");
+            setError("");
+          }
         } else if (Notification.permission === "denied") {
           setStatus("denied");
         } else {
           setStatus("unsubscribed");
         }
-      } catch {
-        if (!cancelled) setStatus("unsupported");
+      } catch (cause) {
+        if (!cancelled) {
+          setStatus(Notification.permission === "denied" ? "denied" : "unsubscribed");
+          setError(cause instanceof Error ? cause.message : "Could not initialize notifications.");
+        }
       }
     }
 
@@ -48,51 +71,55 @@ export function usePushNotifications() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [saveSubscription]);
 
   const subscribe = useCallback(async () => {
     if (!("serviceWorker" in navigator)) return;
+    setError("");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setStatus("denied");
+        return;
+      }
 
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      setStatus("denied");
-      return;
+      const registration = await navigator.serviceWorker.ready;
+      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidPublicKey) throw new Error("Notifications are not configured on this deployment.");
+
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+      }
+
+      await saveSubscription(subscription);
+      setStatus("subscribed");
+    } catch (cause) {
+      setStatus("unsubscribed");
+      setError(cause instanceof Error ? cause.message : "Could not enable notifications.");
     }
-
-    const registration = await navigator.serviceWorker.ready;
-    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!vapidPublicKey) {
-      console.error("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
-      return;
-    }
-
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-    });
-
-    await fetch("/api/push/subscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(subscription.toJSON()),
-    });
-
-    setStatus("subscribed");
-  }, []);
+  }, [saveSubscription]);
 
   const unsubscribe = useCallback(async () => {
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
     if (subscription) {
-      await fetch("/api/push/unsubscribe", {
+      const response = await fetch("/api/push/unsubscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint: subscription.endpoint }),
       });
+      if (!response.ok) {
+        setError("Could not remove this device from your account.");
+        return;
+      }
       await subscription.unsubscribe();
     }
     setStatus("unsubscribed");
   }, []);
 
-  return { status, subscribe, unsubscribe };
+  return { status, error, subscribe, unsubscribe };
 }

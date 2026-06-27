@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const circles = await prisma.circle.findMany({
+  const [circles, unreadReceipts, blocks] = await Promise.all([prisma.circle.findMany({
     where: { members: { some: { userId: session.user.id } } },
     include: {
       members: { include: { user: true } },
@@ -20,7 +20,21 @@ export async function GET() {
         include: { sender: true },
       },
     },
-  });
+  }), prisma.boardReceipt.findMany({
+    where: { userId: session.user.id, seenAt: null },
+    select: { board: { select: { circleId: true } } },
+  }), prisma.userBlock.findMany({
+    where: { OR: [{ blockerId: session.user.id }, { blockedId: session.user.id }] },
+    select: { blockerId: true, blockedId: true },
+  })]);
+  const blockedPeerIds = new Set(
+    blocks.map((block) => block.blockerId === session.user.id ? block.blockedId : block.blockerId)
+  );
+  const unreadByCircle = new Map<string, number>();
+  for (const receipt of unreadReceipts) {
+    const id = receipt.board.circleId;
+    unreadByCircle.set(id, (unreadByCircle.get(id) || 0) + 1);
+  }
 
   // Sort by most recent board activity (circles with no boards yet go last)
   circles.sort((a, b) => {
@@ -29,7 +43,10 @@ export async function GET() {
     return bTime - aTime;
   });
 
-  const shaped = circles.map((circle) => {
+  const shaped = circles.filter((circle) =>
+    !circle.isDirect ||
+    !circle.members.some((member) => member.userId !== session.user.id && blockedPeerIds.has(member.userId))
+  ).map((circle) => {
     const otherMembers = circle.members.filter((m) => m.userId !== session.user.id);
     const displayName = circle.isDirect
       ? otherMembers[0]?.user.name ?? "Unknown"
@@ -41,6 +58,7 @@ export async function GET() {
       isDirect: circle.isDirect,
       boardColor: circle.boardColor,
       memberCount: circle.members.length,
+      unreadCount: unreadByCircle.get(circle.id) || 0,
       members: circle.members.map((m) => ({
         id: m.user.id,
         name: m.user.name,

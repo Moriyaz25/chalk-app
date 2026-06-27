@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isBlockedPair } from "@/lib/safety";
 
 export async function POST(
   _req: Request,
@@ -11,9 +12,12 @@ export async function POST(
   const { circleId, boardId } = await params;
   const board = await prisma.board.findFirst({
     where: { id: boardId, circleId, circle: { members: { some: { userId: session.user.id } } } },
-    select: { isPinned: true },
+    select: { isPinned: true, senderId: true },
   });
   if (!board) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (await isBlockedPair(session.user.id, board.senderId)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const next = !board.isPinned;
   await prisma.board.update({ where: { id: boardId }, data: { isPinned: next } });
   return NextResponse.json({ isPinned: next });

@@ -12,13 +12,26 @@ export default async function SettingsPage() {
     select: {
       name: true,
       username: true,
+      bio: true,
+      chalkColor: true,
+      preferences: true,
       image: true,
       email: true,
       createdAt: true,
+      blocksCreated: {
+        select: {
+          blocked: { select: { id: true, name: true, username: true, image: true } },
+        },
+      },
+      _count: { select: { sessions: true } },
     },
   });
 
   if (!user) redirect("/login");
 
-  return <SettingsClient user={{ ...user, createdAt: user.createdAt.toISOString() }} />;
+  return (
+    <SettingsClient
+      user={{ ...user, createdAt: user.createdAt.toISOString() }}
+    />
+  );
 }

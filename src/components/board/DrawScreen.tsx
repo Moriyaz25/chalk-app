@@ -25,14 +25,15 @@ type DrawScreenProps = {
   circleName: string;
   initialDrawing?: ChalkDrawing | null;
   replyToId?: string;
+  initialColor?: string;
 };
 
 type ToolMode = "draw" | "text";
 
-export function DrawScreen({ circleId, circleName, initialDrawing, replyToId }: DrawScreenProps) {
+export function DrawScreen({ circleId, circleName, initialDrawing, replyToId, initialColor }: DrawScreenProps) {
   const router = useRouter();
   const canvasRef = useRef<ChalkCanvasHandle>(null);
-  const [color, setColor] = useState<string>(CHALK_COLORS[0].hex);
+  const [color, setColor] = useState<string>(initialColor || CHALK_COLORS[0].hex);
   const [brushWidth, setBrushWidth] = useState(8);
   const [boardColor, setBoardColor] = useState<BoardColorKey>("chalkboard-green");
   const [mode, setMode] = useState<ToolMode>("draw");

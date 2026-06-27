@@ -30,9 +30,30 @@ export async function POST(
     return NextResponse.json({ error: "You can't accept your own invite" }, { status: 400 });
   }
 
+  const blocked = await prisma.userBlock.findFirst({
+    where: {
+      OR: [
+        { blockerId: invite.createdBy, blockedId: session.user.id },
+        { blockerId: session.user.id, blockedId: invite.createdBy },
+      ],
+    },
+  });
+  if (blocked) {
+    return NextResponse.json({ error: "This invite is unavailable" }, { status: 403 });
+  }
+
   let circleId = invite.circleId;
 
   const result = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.invite.updateMany({
+      where: {
+        id: invite.id,
+        OR: [{ maxUses: 0 }, { uses: { lt: invite.maxUses } }],
+      },
+      data: { uses: { increment: 1 } },
+    });
+    if (claimed.count === 0) throw new Error("INVITE_USED");
+
     if (!circleId) {
       // Direct invite — create a new 1-on-1 circle between creator and acceptor.
       const circle = await tx.circle.create({
@@ -59,13 +80,12 @@ export async function POST(
       }
     }
 
-    await tx.invite.update({
-      where: { id: invite.id },
-      data: { uses: { increment: 1 } },
-    });
-
     return circleId;
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "INVITE_USED") return null;
+    throw error;
   });
 
+  if (!result) return NextResponse.json({ error: "This invite has already been used" }, { status: 410 });
   return NextResponse.json({ circleId: result });
 }
