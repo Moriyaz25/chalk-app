@@ -258,18 +258,18 @@ export function DrawScreen({ circleId, circleName, initialDrawing, replyToId, in
     !!experience.gift;
 
   return (
-    <div className="board-texture flex h-dvh flex-col">
+    <div className="board-texture flex h-dvh flex-col overflow-hidden">
       <header className="z-10 flex items-center gap-3 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <button
           onClick={() => router.back()}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/8 text-chalk-white/85 active:scale-90"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-chalk-white/85 shadow-sm active:scale-90"
           aria-label="Back"
         >
           <ChevronLeft size={20} />
         </button>
         <div className="min-w-0 flex-1">
           <p className="font-hand text-2xl leading-none text-chalk-white">{circleName}</p>
-          <p className="flex items-center gap-1.5 font-sans text-[11px] text-chalk-white/55">
+          <p className="flex items-center gap-1.5 truncate font-sans text-[11px] text-chalk-white/55">
             <Sparkles size={12} />
             handmade card studio
           </p>
@@ -286,7 +286,7 @@ export function DrawScreen({ circleId, circleName, initialDrawing, replyToId, in
             setLiveTogether((value) => !value);
             setLiveLabel(liveTogether ? "" : "Opening a shared canvas…");
           }}
-          className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-xs ${
+          className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs shadow-sm ${
             liveTogether
               ? "bg-chalk-mint/20 text-chalk-mint ring-1 ring-chalk-mint/40"
               : "bg-white/8 text-chalk-white/65"
@@ -297,9 +297,9 @@ export function DrawScreen({ circleId, circleName, initialDrawing, replyToId, in
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 px-3">
+      <div className="flex min-h-0 flex-1 items-center justify-center px-3">
         <div
-          className="h-full w-full overflow-hidden rounded-lg ring-1 ring-white/10 shadow-2xl shadow-black/25"
+          className="aspect-square h-full max-h-full max-w-full overflow-hidden rounded-lg ring-1 ring-white/10 shadow-2xl shadow-black/25"
           style={{ backgroundColor: BOARD_COLORS[boardColor] }}
         >
           <ChalkCanvas
@@ -312,14 +312,14 @@ export function DrawScreen({ circleId, circleName, initialDrawing, replyToId, in
             selectedTextId={selectedTextId}
             onSelectText={setSelectedTextId}
             onMoveText={handleMoveText}
-            className="h-full w-full"
+            className="block h-full w-full"
             onStrokesChange={handleStrokesChange}
             initialStrokes={initialDrawing?.strokes}
           />
         </div>
       </div>
 
-      <div className="max-h-[47dvh] space-y-4 overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
+      <div className="max-h-[46dvh] space-y-3 overflow-y-auto px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
         {liveLabel && (
           <p className="flex items-center justify-center gap-2 text-xs text-chalk-mint">
             <span className="h-2 w-2 animate-pulse rounded-full bg-chalk-mint" />

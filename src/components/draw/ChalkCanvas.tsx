@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
   forwardRef,
   useCallback,
+  useEffect,
 } from "react";
 import { BOARD_VIEWBOX, type ChalkStroke, type ChalkTextElement } from "@/types/chalk";
 
@@ -83,17 +84,43 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
     const [, setRedoStack] = useState<ChalkStroke[]>([]);
     const currentPoints = useRef<Point[]>([]);
     const [liveStroke, setLiveStroke] = useState<ChalkStroke | null>(null);
+    const liveStrokeFrame = useRef<number | null>(null);
     const drawing = useRef(false);
     const pointerId = useRef<number | null>(null);
     const draggingTextId = useRef<string | null>(null);
+    const textDragOffset = useRef<Point>({ x: 0, y: 0 });
 
     const toSvgPoint = useCallback((clientX: number, clientY: number): Point => {
       const svg = svgRef.current;
       if (!svg) return { x: 0, y: 0 };
-      const rect = svg.getBoundingClientRect();
-      const x = ((clientX - rect.left) / rect.width) * BOARD_VIEWBOX.width;
-      const y = ((clientY - rect.top) / rect.height) * BOARD_VIEWBOX.height;
-      return { x, y };
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return { x: 0, y: 0 };
+      const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+      return { x: point.x, y: point.y };
+    }, []);
+
+    const scheduleLiveStroke = useCallback(
+      (width = strokeWidth) => {
+        if (liveStrokeFrame.current !== null) return;
+        liveStrokeFrame.current = window.requestAnimationFrame(() => {
+          liveStrokeFrame.current = null;
+          setLiveStroke({
+            d: pointsToPath(currentPoints.current),
+            color,
+            width,
+            opacity: 0.9,
+          });
+        });
+      },
+      [color, strokeWidth]
+    );
+
+    useEffect(() => {
+      return () => {
+        if (liveStrokeFrame.current !== null) {
+          window.cancelAnimationFrame(liveStrokeFrame.current);
+        }
+      };
     }, []);
 
     const handlePointerDown = useCallback(
@@ -131,14 +158,9 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
             currentPoints.current.push(point);
           }
         }
-        setLiveStroke({
-          d: pointsToPath(currentPoints.current),
-          color,
-          width: strokeWidth,
-          opacity: 0.9,
-        });
+        scheduleLiveStroke();
       },
-      [color, strokeWidth, toSvgPoint]
+      [scheduleLiveStroke, toSvgPoint]
     );
 
     const updateStrokes = useCallback(
@@ -156,6 +178,10 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
       if (!drawing.current) return;
       drawing.current = false;
       pointerId.current = null;
+      if (liveStrokeFrame.current !== null) {
+        window.cancelAnimationFrame(liveStrokeFrame.current);
+        liveStrokeFrame.current = null;
+      }
 
       if (currentPoints.current.length > 0) {
         const finished: ChalkStroke = {
@@ -209,16 +235,18 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
     }));
 
     const handleTextPointerDown = useCallback(
-      (e: React.PointerEvent<SVGGElement>, id: string) => {
+      (e: React.PointerEvent<SVGGElement>, item: ChalkTextElement) => {
         if (mode !== "text") return;
         e.preventDefault();
         e.stopPropagation();
         e.currentTarget.setPointerCapture(e.pointerId);
         pointerId.current = e.pointerId;
-        draggingTextId.current = id;
-        onSelectText?.(id);
+        draggingTextId.current = item.id;
+        const point = toSvgPoint(e.clientX, e.clientY);
+        textDragOffset.current = { x: point.x - item.x, y: point.y - item.y };
+        onSelectText?.(item.id);
       },
-      [mode, onSelectText]
+      [mode, onSelectText, toSvgPoint]
     );
 
     const handleTextPointerMove = useCallback(
@@ -227,7 +255,11 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
         e.preventDefault();
         e.stopPropagation();
         const point = toSvgPoint(e.clientX, e.clientY);
-        onMoveText?.(draggingTextId.current, point.x, point.y);
+        onMoveText?.(
+          draggingTextId.current,
+          point.x - textDragOffset.current.x,
+          point.y - textDragOffset.current.y
+        );
       },
       [mode, onMoveText, toSvgPoint]
     );
@@ -300,7 +332,7 @@ export const ChalkCanvas = forwardRef<ChalkCanvasHandle, ChalkCanvasProps>(
             <g
               key={item.id}
               transform={`translate(${item.x} ${item.y}) rotate(${item.rotation})`}
-              onPointerDown={(e) => handleTextPointerDown(e, item.id)}
+              onPointerDown={(e) => handleTextPointerDown(e, item)}
               onPointerMove={handleTextPointerMove}
               onPointerUp={finishTextDrag}
               onPointerCancel={finishTextDrag}

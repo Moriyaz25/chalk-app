@@ -10,23 +10,49 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [circles, unreadReceipts, blocks] = await Promise.all([prisma.circle.findMany({
-    where: { members: { some: { userId: session.user.id, hiddenAt: null } } },
-    include: {
-      members: { include: { user: true } },
-      boards: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: { sender: true },
+  const userBlockDelegate = (prisma as typeof prisma & {
+    userBlock?: {
+      findMany: typeof prisma.boardReceipt.findMany;
+    };
+  }).userBlock;
+
+  const [circles, unreadReceipts, blocks] = await Promise.all([
+    prisma.circle.findMany({
+      where: { members: { some: { userId: session.user.id, hiddenAt: null } } },
+      select: {
+        id: true,
+        name: true,
+        isDirect: true,
+        boardColor: true,
+        members: {
+          select: {
+            userId: true,
+            role: true,
+            user: { select: { id: true, name: true, image: true } },
+          },
+        },
+        boards: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            createdAt: true,
+            sender: { select: { name: true } },
+          },
+        },
       },
-    },
-  }), prisma.boardReceipt.findMany({
-    where: { userId: session.user.id, seenAt: null },
-    select: { board: { select: { circleId: true } } },
-  }), prisma.userBlock.findMany({
-    where: { OR: [{ blockerId: session.user.id }, { blockedId: session.user.id }] },
-    select: { blockerId: true, blockedId: true },
-  })]);
+    }),
+    prisma.boardReceipt.findMany({
+      where: { userId: session.user.id, seenAt: null },
+      select: { board: { select: { circleId: true } } },
+    }),
+    userBlockDelegate
+      ? userBlockDelegate.findMany({
+          where: { OR: [{ blockerId: session.user.id }, { blockedId: session.user.id }] },
+          select: { blockerId: true, blockedId: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const blockedPeerIds = new Set(
     blocks.map((block) => block.blockerId === session.user.id ? block.blockedId : block.blockerId)
   );
